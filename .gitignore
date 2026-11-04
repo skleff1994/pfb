@@ -1,0 +1,10 @@
+# generated data and outputs
+examples/data/
+examples/figures/pdf/
+sim/data/
+sim/out/
+# Python and pixi
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.pixi/

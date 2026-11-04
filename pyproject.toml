@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pfb"
+version = "0.1.0"
+description = "Numerical checks of measurement-conditioned bounds on planar frictional wrench sets"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "matplotlib", "cvxpy"]
+
+[tool.setuptools]
+packages = ["pfb", "hw"]
+
+# --- pixi -------------------------------------------------------------------------------
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+numpy = "*"
+scipy = "*"
+matplotlib = "*"
+cvxpy = "*"
+pytest = "*"
+
+[tool.pixi.pypi-dependencies]
+pfb = { path = ".", editable = true }
+rosbags = "*"  # hw/: reads ROS1/ROS2 bags without a ROS install
+
+# Drake (simulation study, sim/) lives in a separate environment: pixi run -e sim ...
+[tool.pixi.feature.drake]
+platforms = ["linux-64"]  # Drake wheels: manylinux_2_34 (and macOS 26 only, not set up here)
+system-requirements = { libc = "2.34" }  # Drake >= 1.47 wheels are manylinux_2_34
+
+[tool.pixi.feature.drake.pypi-dependencies]
+drake = "*"
+
+[tool.pixi.feature.drake.tasks]
+sim-smoke = { cmd = "python smoke_contact.py", cwd = "sim" }
+sim-breakaway = { cmd = "python bar_breakaway.py", cwd = "sim" }
+sim-sweep = { cmd = "python sweep_breakaway.py", cwd = "sim" }
+sim-grip = { cmd = "python grip_study.py", cwd = "sim" }
+sim-grip-quick = { cmd = "python grip_study.py --quick", cwd = "sim" }
+sim-grip-plot = { cmd = "python plot_grip.py", cwd = "sim" }
+sim-show = { cmd = "python show_episode.py", cwd = "sim" }
+sim-delay = { cmd = "python delay_study.py", cwd = "sim" }
+sim-delay-plot = { cmd = "python plot_delay.py", cwd = "sim" }
+
+# Offline GelSight reconstruction (hw/depth.py): gs_sdk's Reconstructor needs torch and OpenCV.
+# gs_sdk itself is taken from the GelSight workspace: export GS_SDK_PATH=<gelsight_ws>/src/gs_sdk
+[tool.pixi.feature.hw.dependencies]
+python = "3.12.*"
+pytorch-cpu = "*"
+opencv = "*"
+
+[tool.pixi.environments]
+sim = { features = ["drake"] }
+hw = { features = ["hw"] }
+
+[tool.pixi.tasks]
+test = "pytest -q"
+counterexample = "python examples/01_counterexample.py"
+bounds = "python examples/02_bounds_vs_truth.py"
+refinement = "python examples/03_refinement.py"
+visualize = "python examples/04_visualize.py"
+concepts = "python examples/05_concepts.py"
+fields = "python examples/06_fields.py"
+wrench-sets = "python examples/07_wrench_sets.py"
+resolution = "python examples/08_resolution.py"
+plugin = { cmd = "python examples/09_plugin.py", depends-on = ["resolution"] }
+load-factor = "python examples/10_load_factor.py"
+examples = { depends-on = ["counterexample", "bounds", "refinement", "visualize", "concepts",
+                           "fields", "wrench-sets", "resolution", "plugin", "load-factor"] }
