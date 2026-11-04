@@ -1,9 +1,10 @@
-"""Certified load factor (pfb.certify) over the field population: capacity, not support values.
+"""Certified and upper load factors (pfb.certify) over the field population: capacity, not support values.
 
-For a load w about the pad centre o, the load factor s*(nu) = max {s : s w in W(nu)} is the capacity
+For a load w about the pad centre o, the load factor s*(nu) = max {s : s w in X_o(nu)} is the capacity
 along w (for w = (0, 0, 1), the maximal pure torque; this is inf_a h((a, 1)), not h((0, 0, 1))).
-Left, middle: certified s*_lo / true s* for M_T and M_F against resolution (median and interquartile
-range over the population), and the plug-in estimate / true s*. Right: solve time of one certificate.
+Left, middle: certified s_lo / true s* (solid) and upper s_up / true s* (dashed) for M_T and M_F against
+resolution (median and interquartile range over the population), and the plug-in estimate / true s*.
+A load is surely carried if s_lo >= 1 and surely not if s_up < 1. Right: solve time of one certificate.
 Figures: 10_load_factor.png and $PFB_DOC_FIG/load_factor.pdf.
 """
 
@@ -13,7 +14,7 @@ import numpy as np
 
 import pfb
 from _style import COLOR, MUTED, plt, save
-from pfb.certify import PadTerm, load_factor_lower, load_factor_true
+from pfb.certify import PadTerm, load_factor_lower, load_factor_true, load_factor_upper
 from pfb.plot import LABEL, plot_band
 
 MU = 1.0
@@ -25,7 +26,7 @@ LOADS = {"pure torque  w = (0, 0, 1)": np.array([0.0, 0.0, 1.0]),
 ks = [1, 2, 4, 8, 16, 32]
 
 shape = (len(fields), len(ks), len(LOADS))
-R = {key: np.zeros(shape) for key in ("MT", "MF", "plugin")}
+R = {key: np.zeros(shape) for key in ("MT", "MF", "MT_up", "MF_up", "plugin")}
 times = {"MT": [[] for _ in ks], "MF": [[] for _ in ks]}
 t0 = time.time()
 for i, field in enumerate(fields):
@@ -41,6 +42,7 @@ for i, field in enumerate(fields):
                 t = time.perf_counter()
                 R[key][i, j, l] = load_factor_lower(PadTerm.from_taxels(tx, F, cop=cop), w, MU, o) / true
                 times[key][j].append(time.perf_counter() - t)
+                R[f"{key}_up"][i, j, l] = load_factor_upper(PadTerm.from_taxels(tx, F, cop=cop), w, MU, o) / true
             R["plugin"][i, j, l] = load_factor_true(patch.points, est.w, w, MU, o) / true
     print(f"[{i + 1}/{len(fields)}] {field.label}  ({time.time() - t0:.0f} s)")
 
@@ -49,9 +51,10 @@ for ax, (l, name) in zip(axes[:2], enumerate(LOADS)):
     plot_band(ax, ks, R["plugin"][:, :, l], "#9b9a96", "plug-in / true (not a bound)")
     for key in ("MT", "MF"):
         plot_band(ax, ks, R[key][:, :, l], COLOR[key], f"certified {LABEL[key]} / true")
+        plot_band(ax, ks, R[f"{key}_up"][:, :, l], COLOR[key], f"upper {LABEL[key]} / true", ls="--", marker=None)
     ax.axhline(1, color=COLOR["truth"], lw=1)
     ax.set_xscale("log", base=2); ax.set_xticks(ks, [f"{k}x{k}" for k in ks])
-    ax.set_ylim(0, 1.6); ax.set_xlabel("taxels"); ax.set_title(name, loc="left", fontsize=10)
+    ax.set_ylim(0, 2.5); ax.set_xlabel("taxels"); ax.set_title(name, loc="left", fontsize=10)
 axes[0].set_ylabel("load factor / true load factor")
 ax = axes[2]
 for key in ("MT", "MF"):
@@ -69,8 +72,9 @@ save(fig, "10_load_factor.png", pdf_stem="load_factor")
 
 for l, name in enumerate(LOADS):
     print(f"\n{name}: medians")
-    print(f"{'k':>6} | {'MT/true':>8} {'MF/true':>8} {'plug-in/true':>12} {'plug-in > 1':>11} | {'ms MT':>6} {'ms MF':>6}")
+    print(f"{'k':>6} | {'MT/true':>8} {'MF/true':>8} {'MT up':>6} {'MF up':>6} {'plug-in/true':>12} {'plug-in > 1':>11} | {'ms MT':>6} {'ms MF':>6}")
     for j, k in enumerate(ks):
         print(f"{f'{k}x{k}':>6} | {np.median(R['MT'][:, j, l]):8.3f} {np.median(R['MF'][:, j, l]):8.3f} "
+              f"{np.median(R['MT_up'][:, j, l]):6.3f} {np.median(R['MF_up'][:, j, l]):6.3f} "
               f"{np.median(R['plugin'][:, j, l]):12.3f} {np.mean(R['plugin'][:, j, l] > 1):11.0%} | "
               f"{1e3 * np.median(times['MT'][j]):6.1f} {1e3 * np.median(times['MF'][j]):6.1f}")

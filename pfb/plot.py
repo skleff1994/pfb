@@ -1,12 +1,14 @@
-"""Visualization: patch and pressure, the wrench set W(nu), its support function and the bounds.
+"""Visualization: patch and pressure, the wrench set X_o(nu), its support function and the bounds.
 
 Import explicitly with `import pfb.plot as pp` (the core package does not need matplotlib).
 
 Sets drawn from a support-type function h over finitely many directions q_i are the polytopes
-K_h = {w : <q_i, w> <= h(q_i)}. For h = h_true this approximates W(nu) from outside. For the
-upper bound it approximates the outer set W+(y), and for the lower bound the inner set W-(y)
-of eq. (30). In a coordinate plane, K_h built from in-plane q is the projection of the set onto
-that plane for h_true and the upper bound. For the lower bound it contains the projection of W-(y).
+K_h = {w : <q_i, w> <= h(q_i)}. For h = h_true this approximates X_o(nu) from outside. For the
+upper bound it approximates the possible set X+(y), and for the lower bound the guaranteed set X-(y)
+(prop:inner_outer). In a coordinate plane, K_h built from in-plane q is the projection of the set onto
+that plane for h_true and the upper bound. For the lower bound it contains the projection of X-(y).
+Wrenches and twists are about the reference point o (default: the origin of the patch coordinates); the
+twists are moved to the origin with `shift_twist` before the bounds are evaluated.
 """
 
 import matplotlib.pyplot as plt
@@ -16,6 +18,7 @@ from scipy.spatial import ConvexHull, HalfspaceIntersection
 
 from .bounds import (bounds_M0, bounds_MF, bounds_MT, cop_set_MF, measure_M0, measure_MF,
                      measure_MT)
+from .geometry import shift_twist
 from .measure import support, support_points
 from .reduced import reduced_M0, reduced_MF, reduced_MT
 
@@ -41,20 +44,21 @@ def plane_directions(n, plane="fx-tau", torque_scale=1.0):
     return Q, theta
 
 
-def all_bounds(nu, taxels, Q, mu=1.0, which=("M0", "MF", "MT"), mf_kwargs=None, method="reduced"):
-    """Dict {name: (lower, upper)} of the requested bounds over the directions Q, plus 'truth'.
+def all_bounds(nu, taxels, Q, mu=1.0, which=("M0", "MF", "MT"), method="reduced", o=None):
+    """Dict {name: (lower, upper)} of the requested bounds over the twists Q about o, plus 'truth'.
 
-    method="reduced" uses the finite-dimensional formulations of the draft (`pfb.reduced`),
+    method="reduced" uses the exact finite-dimensional forms (`pfb.reduced`),
     method="grid" the LPs on the support grid (`pfb.bounds`).
     """
     M0, MF, MT = (reduced_M0, reduced_MF, reduced_MT) if method == "reduced" else (bounds_M0, bounds_MF, bounds_MT)
-    out = {"truth": support(nu, Q, mu)}
+    Q0 = Q if o is None else shift_twist(Q, o)
+    out = {"truth": support(nu, Q0, mu)}
     if "M0" in which:
-        out["M0"] = M0(taxels.patch, measure_M0(nu), Q, mu)
+        out["M0"] = M0(taxels.patch, measure_M0(nu), Q0, mu)
     if "MF" in which:
-        out["MF"] = MF(taxels, measure_MF(nu, taxels), Q, mu, **(mf_kwargs or {}))
+        out["MF"] = MF(taxels, measure_MF(nu, taxels), Q0, mu)
     if "MT" in which:
-        out["MT"] = MT(taxels, measure_MT(nu, taxels), Q, mu)
+        out["MT"] = MT(taxels, measure_MT(nu, taxels), Q0, mu)
     return out
 
 
@@ -125,21 +129,21 @@ def plot_patch(nu, taxels=None, ax=None, cop_set=True):
     return ax
 
 
-def plot_wrench_set(nu, mu=1.0, ax=None, n=600, bounds=None):
-    """3D view of W(nu) (convex hull of support points), plus optional bound polytopes.
+def plot_wrench_set(nu, mu=1.0, ax=None, n=600, bounds=None, o=None):
+    """3D view of X_o(nu) (convex hull of support points, torques about o), plus optional bound polytopes.
 
-    bounds: {name: (Q, lower, upper)}. The upper bound polytope (W+) is drawn as a faint shell
-    and the lower one (W-) as a more opaque surface, both in the hypothesis colour.
+    bounds: {name: (Q, lower, upper)}. The upper bound polytope (X+) is drawn as a faint shell
+    and the lower one (X-) as a more opaque surface, both in the hypothesis colour.
     """
     if ax is None:
         ax = plt.figure().add_subplot(projection="3d")
     from .geometry import directions
     Q = directions(n // 2, torque_scale=1.0 / nu.patch.diam)
     Q = np.vstack([Q, -Q])
-    pts = support_points(nu, Q, mu)
+    pts = support_points(nu, Q, mu, o)
     hull = ConvexHull(pts)
     ax.add_collection3d(Poly3DCollection(pts[hull.simplices], facecolor="#9b9a96", edgecolor="none",
-                                         alpha=0.35, label="$W(\\nu^*)$"))
+                                         alpha=0.35, label="$\\mathcal{X}(\\nu^*)$"))
     for name, (Qb, lo, up) in (bounds or {}).items():
         for h, solid in ((up, False), (lo, True)):
             poly = polytope_from_support(Qb, h)
@@ -161,14 +165,14 @@ def plot_projection(Q, plane, B, ax=None):
     """Sets K_h in a coordinate plane for the truth and for each bound in B = all_bounds(...).
 
     Upper bound sets are drawn as solid lines and lower bound sets as dashed lines. The true
-    projection of W(nu) is filled.
+    projection of X_o(nu) is filled.
     """
     ax = ax or plt.gca()
     i, j = PLANES[plane]
     N = Q[:, [i, j]]
     V = polygon_from_support(N, B["truth"])
     ax.fill(V[:, 0], V[:, 1], color="#9b9a96", alpha=0.35, lw=0)
-    ax.plot(V[:, 0], V[:, 1], color=COLOR["truth"], lw=1.5, label="$W(\\nu^*)$")
+    ax.plot(V[:, 0], V[:, 1], color=COLOR["truth"], lw=1.5, label="$\\mathcal{X}(\\nu^*)$")
     for name in ("M0", "MF", "MT"):
         if name not in B:
             continue
@@ -193,7 +197,7 @@ def plot_support(theta, B, ax=None, polar=False):
             ax.fill_between(th, lo, up, color=COLOR[name], alpha=0.2, lw=0)
             ax.plot(th, lo, color=COLOR[name], lw=1.2, label=LABEL[name])
             ax.plot(th, up, color=COLOR[name], lw=1.2)
-    ax.plot(th, close(B["truth"]), color=COLOR["truth"], lw=1.5, label="$h_{W(\\nu^*)}$")
+    ax.plot(th, close(B["truth"]), color=COLOR["truth"], lw=1.5, label="$h_{\\mathcal{X}(\\nu^*)}$")
     if not polar:
         ax.set_xlabel("direction angle $\\theta$")
         ax.set_xticks(np.pi * np.arange(5) / 2, ["0", "$\\pi/2$", "$\\pi$", "$3\\pi/2$", "$2\\pi$"])
@@ -213,26 +217,26 @@ def plot_band(ax, x, Y, color, label=None, ls="-", percentiles=(25, 75), marker=
 
 
 def overview(nu, taxels, mu=1.0, plane="fx-tau", n_plane=60, which=("M0", "MF", "MT"),
-             n_3d=150, mf_kwargs=None, method="reduced"):
-    """One figure: patch | 3D wrench set with M_T sets | support in `plane` | projection.
+             n_3d=150, method="reduced", o=None):
+    """One figure: patch | 3D wrench set with M_T sets | support in `plane` | projection, torques about o.
 
-    M_F is the slow one (outer search over the CoP). mf_kwargs is passed to the M_F bound
-    function, e.g. dict(polish=False, n_c=5). `method` is passed to `all_bounds`.
+    `method` is passed to `all_bounds`.
     """
     s = 1.0 / nu.patch.diam  # balance force and torque units in the sampled directions
     Q, theta = plane_directions(n_plane, plane, torque_scale=s if plane != "fx-fy" else 1.0)
-    B = all_bounds(nu, taxels, Q, mu, which, mf_kwargs, method)
+    B = all_bounds(nu, taxels, Q, mu, which, method, o)
     from .geometry import directions
     Q3 = directions(n_3d // 2, torque_scale=s)
     Q3 = np.vstack([Q3, -Q3])
-    lo3, up3 = (reduced_MT if method == "reduced" else bounds_MT)(taxels, measure_MT(nu, taxels), Q3, mu)
+    Q30 = Q3 if o is None else shift_twist(Q3, o)
+    lo3, up3 = (reduced_MT if method == "reduced" else bounds_MT)(taxels, measure_MT(nu, taxels), Q30, mu)
 
     fig = plt.figure(figsize=(17, 4.6))
     gs = fig.add_gridspec(1, 4, width_ratios=[1.1, 1.2, 1, 1], wspace=0.35)
     plot_patch(nu, taxels, fig.add_subplot(gs[0]))
     ax3 = fig.add_subplot(gs[1], projection="3d")
-    plot_wrench_set(nu, mu, ax3, bounds={"MT": (Q3, lo3, up3)})
-    ax3.set_title("$W(\\nu^*)$ (grey), $\\mathcal{M}_T$ inner / outer", loc="left", fontsize=10)
+    plot_wrench_set(nu, mu, ax3, bounds={"MT": (Q3, lo3, up3)}, o=o)
+    ax3.set_title("$\\mathcal{X}(\\nu^*)$ (grey), $\\mathcal{M}_T$ inner / outer", loc="left", fontsize=10)
     plot_support(theta, B, fig.add_subplot(gs[2]))
     ax = plot_projection(Q, plane, B, fig.add_subplot(gs[3]))
     ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=False)

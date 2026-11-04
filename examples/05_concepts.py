@@ -1,9 +1,9 @@
-"""Conceptual figures for the draft, computed with pfb.
+"""Conceptual figures for the theory note, computed with pfb.
 
-  measurements.pdf      what M_0, M_F and M_T know about the same contact (Fig. 1)
-  vertex_reduction.pdf  lower bound = concentrate, upper bound = spread to the corners (Remark 5.7)
-  closure.pdf           ghost masses on taxel corners and the CoP-preserving fix (Remark 5.9);
-                        not used by the draft at the moment (the figure is commented out)
+  measurements.pdf      what M_0, M_F and M_T know about the same contact
+  vertex_reduction.pdf  lower bound = concentrate, upper bound = spread to the corners (rem:why_lemmas)
+  closure.pdf           ghost masses on taxel corners and the CoP-preserving push (lem:half_open);
+                        not used by the theory note at the moment
 
 Vector PDFs are written to $PFB_DOC_FIG (see _style.py), and PNG previews to examples/figures/.
 """
@@ -87,7 +87,7 @@ for ax, with_cop in zip(axes[1:], (False, True)):
         cop_marker(ax, nu.cop)
     else:
         ax.add_patch(plt.Rectangle(lo_c, *(hi_c - lo_c), fill=False, ec=COLOR["MF"], lw=1.4, ls="--"))
-        ax.text(lo_c[0] - 0.01, lo_c[1], "$\\mathcal{C}_{\\mathcal{M}_F}$", color=COLOR["MF"], ha="right", va="top")
+        ax.text(lo_c[0] - 0.01, lo_c[1], "CoP", color=COLOR["MF"], ha="right", va="top")
 axes[1].set_title("$\\mathcal{M}_F$: taxel forces $F_i$, CoP unknown", loc="left")
 axes[2].set_title("$\\mathcal{M}_T$: taxel forces $F_i$ + CoP", loc="left")
 for ax in axes[1:]:
@@ -97,11 +97,12 @@ save(fig, "measurements.png", pdf_stem="measurements")
 
 # --- Fig. 2: vertex reduction ---------------------------------------------------------------
 tx = pfb.TaxelGrid(patch, 3, 3)
-fN, c, F = pfb.measure_MT(nu, tx)
-q = np.array([0.0, 0.0, 1.0])  # pure torsion: g(x) = ||x - c||, a bowl centred at the CoP
+fN, m1, F = pfb.measure_MT(nu, tx)
+c = m1 / fN
+q = pfb.shift_twist([0.0, 0.0, 1.0], c)  # unit rotation about the CoP: g(x) = ||x - c||, a bowl centred at the CoP
 h = pfb.support(nu, q, mu)
-lo_val, pts = pfb.socp_lower_MT(tx, F, c, q, mu, return_points=True)
-up_val, lam = pfb.vertex_lp_MT(tx, F, c, q, mu, return_weights=True)
+lo_val, pts = pfb.socp_lower_MT(tx, F, m1, q, mu, return_points=True)
+up_val, lam = pfb.vertex_lp_MT(tx, F, m1, q, mu, return_weights=True)
 V = pfb.taxel_vertices(tx)
 bary = taxel_barycenters(nu, tx)
 size = lambda m: 260 * m / fN  # marker area proportional to force
@@ -136,7 +137,7 @@ grid_lines(ax, tx)
 ax.contour(X, Y, np.hypot(X - c[0], Y - c[1]), levels=6, colors=INK, linewidths=0.4, alpha=0.6)
 cop_marker(ax, c)
 frame(ax, "(b) $\\nu^\\star$ and level sets of $g$")
-ax.text(0.5, -0.06, f"true $h={h:.3f}$ (pure torsion)", ha="center", va="top", transform=ax.transAxes, fontsize=6.5)
+ax.text(0.5, -0.06, f"true $h={h:.3f}$ (rotation about the CoP)", ha="center", va="top", transform=ax.transAxes, fontsize=6.5)
 # (c) lower bound: one point per taxel, pulled toward the CoP
 ax = axes[2]
 pressure(ax, rho, alpha=0.2)
@@ -162,12 +163,13 @@ ax.text(0.5, -0.06, f"$\\overline{{h}}={up_val:.3f}$, {keep.sum()} nonzero weigh
 fig.tight_layout(w_pad=0.6)
 save(fig, "vertex_reduction.png", pdf_stem="vertex_reduction")
 
-# --- closure figure: ghost masses (Remark 5.9) ---------------------------------------------
+# --- closure figure: ghost masses (lem:half_open) ---------------------------------------------
 tx = pfb.TaxelGrid(patch, 2, 1)
-fN, c, F = pfb.measure_MT(nu, tx)
-q = np.array([0.0, 1.0, 1.0]) / np.sqrt(2)  # rotation centre p = c + J a / b, left of the patch
+fN, m1, F = pfb.measure_MT(nu, tx)
+c = m1 / fN
+q = np.array([0.0, 1.0, 1.0]) / np.sqrt(2)  # twist about the CoP; rotation centre p = c + J a / b, left of the patch
 print("Fig 3: rotation centre p =", c + pfb.J @ q[:2] / q[2])
-up_val, lam = pfb.vertex_lp_MT(tx, F, c, q, mu, return_weights=True)
+up_val, lam = pfb.vertex_lp_MT(tx, F, m1, pfb.shift_twist(q, c), mu, return_weights=True)
 V = pfb.taxel_vertices(tx)
 # A corner belongs to its own taxel unless it lies on an open (right or top, non-last) side.
 ix, iy = np.arange(tx.r) % tx.nx, np.arange(tx.r) // tx.nx
@@ -175,7 +177,7 @@ own = np.ones((tx.r, 4), bool)
 own[:, [1, 2]] &= (ix == tx.nx - 1)[:, None]  # corners with x = hi_x
 own[:, [2, 3]] &= (iy == tx.ny - 1)[:, None]  # corners with y = hi_y
 keep = lam > 1e-9 * fN
-p_int = taxel_barycenters(nu, tx)  # interior points with sum F_i p_i = f_N c (Lemma 5.5)
+p_int = taxel_barycenters(nu, tx)  # interior points with sum F_i p_i = m_1 (local CoPs)
 eps = 0.25
 T = (1 - eps) * V + eps * p_int[:, None, :]
 val_eps = mu * np.sum(lam * pfb.integrand(T.reshape(-1, 2), q, c).reshape(tx.r, 4))

@@ -2,8 +2,8 @@
 
 Same population study as 08 (cached). At each resolution, for each direction:
   grey   plug-in / true: the taxel forces spread uniformly over each taxel (`pfb.plugin_uniform`)
-  green  certified M_T lower bound / true (Thm 6.1)
-  orange certified M_F lower bound / true (Thm 7.2)
+  green  certified M_T lower bound / true (thm:combined_lower)
+  orange certified M_F lower bound / true (thm:MF)
 Values above 1 overestimate the capacity, i.e. predict that a load is held when it may slip.
 The certified lower bounds are <= 1 by construction; the percentage above each grey box is the
 share of fields for which the plug-in estimate is unsafe.

@@ -40,14 +40,16 @@ def test_plugin_reproduces_taxel_forces():
 
 
 def test_resolution_study_orderings_and_cache(tmp_path):
-    fields, ks, Q = FIELDS[:2], [1, 2], np.array([[0.0, 0.0, 1.0]])
-    S = pfb.resolution_study(fields, ks, Q, mf_kwargs=dict(n_c=3, polish=False), cache=tmp_path / "s.npz", verbose=False)
+    fields, ks, Q = FIELDS[:2], [1, 2], np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 5.0]])
+    S = pfb.resolution_study(fields, ks, Q, ref="cop", cache=tmp_path / "s.npz", verbose=False)
     h = S["truth"][:, None, :]
-    for key in ("MT", "MF", "ref"):
+    for key in ("MT", "MF"):
         assert np.all(S[f"{key}_lo"] <= h + TOL) and np.all(h <= S[f"{key}_up"] + TOL)
-    assert np.all(S["ref_lo"] <= S["MF_lo"] + TOL) and np.all(S["MF_up"] <= S["ref_up"] + TOL)
-    assert np.all(S["MF_lo"] <= S["MT_lo"] + TOL)
-    again = pfb.resolution_study(fields, ks, Q, mf_kwargs=dict(n_c=3, polish=False), cache=tmp_path / "s.npz", verbose=False)
+    assert np.all(S["MF_lo"] <= S["MT_lo"] + TOL) and np.all(S["MT_up"] <= S["MF_up"] + TOL)
+    assert np.all(S["M0_lo"][:, None, :] <= S["MT_lo"] + TOL)
+    # Rotation about the true CoP: M_0 guarantees nothing.
+    assert np.all(np.abs(S["M0_lo"][:, 0]) < 1e-9)
+    again = pfb.resolution_study(fields, ks, Q, ref="cop", cache=tmp_path / "s.npz", verbose=False)
     assert np.array_equal(again["MT_lo"], S["MT_lo"])
-    other = pfb.resolution_study(fields, [1], Q, mf_kwargs=dict(n_c=3, polish=False), cache=tmp_path / "s.npz", verbose=False)
-    assert other["MT_lo"].shape[1] == 1  # different parameters: recomputed, not reloaded
+    other = pfb.resolution_study(fields, ks, Q, ref=(0.5, 0.5), cache=tmp_path / "s.npz", verbose=False)
+    assert not np.array_equal(other["truth"], S["truth"])  # different reference point: recomputed, not reloaded

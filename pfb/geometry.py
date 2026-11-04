@@ -2,12 +2,14 @@
 
 Everything lives on a rectangular patch P = [0, Lx] x [0, Ly] (Ly = 0 gives a segment).
 Measures are represented by nonnegative weights on the nodes of a fixed "support grid"
-of P, so every GMP of the draft becomes a finite LP over those weights.
+of P, so every GMP of the theory note becomes a finite LP over those weights.
+All wrenches and twists are written about the origin of the patch coordinates, unless a reference
+point is passed explicitly.
 """
 
 import numpy as np
 
-# Skew-symmetric matrix of eq. (17): x × y = (J x)^T y.
+# Skew-symmetric matrix of the planar cross product: x × y = (J x)^T y.
 J = np.array([[0.0, -1.0], [1.0, 0.0]])
 
 
@@ -84,7 +86,7 @@ class TaxelGrid:
         return np.linalg.norm(self.hi - self.lo, axis=1)
 
     def downsample(self, measure):
-        """Taxel forces F_i = nu(P_i), eq. (45)."""
+        """Taxel forces F_i = nu(P_i)."""
         return np.bincount(self.index, weights=measure.w, minlength=self.r) 
         # Sum up the measure over each taxel : number of points in each taxel weighted by measure w
 
@@ -94,6 +96,19 @@ class TaxelGrid:
 
     def __repr__(self):
         return f"TaxelGrid({self.nx}x{self.ny}, max diam={self.diam.max():.3g})"
+
+
+def shift_twist(q, p):
+    """Coordinates about the origin of the twist whose coordinates about the point p are q (Varignon).
+
+    A twist (a, b) about p gives the velocity a + bJ(x - p) at x, i.e. (a - bJp) + bJx: the same twist written
+    about the origin. q: (3,) or (m, 3); p: (2,). Use it to evaluate a physical twist given about a known
+    point, e.g. a rotation about the CoP: shift_twist((0, 0, 1), cop).
+    """
+    q = np.array(q, dtype=float)
+    out = q.copy()
+    out[..., :2] = q[..., :2] - q[..., 2:3] * (J @ np.asarray(p, float))
+    return out
 
 
 def directions(n, torque_scale=1.0):

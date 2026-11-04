@@ -1,26 +1,29 @@
-"""Finite-dimensional reductions of the bounds on the continuous patch (Sections 4, 6, 7).
+"""Exact finite-dimensional forms of the bounds on the continuous patch (rectangular taxel closures).
 
-Unlike `bounds.py`, which solves the GMPs as LPs on a support grid, these functions implement
-the formulas of the draft directly on the taxel geometry (rectangular taxel closures):
+Unlike `bounds.py`, which solves the GMPs as LPs on a support grid, these functions implement the closed forms
+and convex programs of the theory note directly on the taxel geometry. Torques and twists are about the origin;
+measurements are in homogeneous coordinates (f_N, m_1 = int x dnu).
 
-    reduced_M0        Thm 4.3 (closed form) and Cor 4.6 (vertex LP), as the r = 1 case of M_T (Rem 6.3)
-    reduced_MT        Thm 6.1 (SOCP lower bound) and Thm 6.2 (vertex LP upper bound)
-    reduced_MF        Thm 7.2 (joint SOCP lower bound) and Thm 7.3 (max over c in C_MF of the M_T LP)
-    certified_ref_MF  Prop 7.4 (fixed-reference bounds with the CoP-uncertainty correction)
+    reduced_M0         closed-form lower bound mu ||f_N a + bJ m_1|| (thm:coarse_lower) and the patch-vertex LP
+                       (cor:coarse_upper_polygon), as the single-taxel case of M_T
+    coarse_upper_triangles  the same upper bound as a maximum over vertex triangles containing the CoP
+    reduced_MF         closed forms mu sum_i F_i min / max of g over each taxel (thm:MF)
+    reduced_MT         SOCP lower bound in the local first moments u_i (thm:combined_lower) and the corner LP
+                       upper bound (thm:combined_upper)
 
-The values are exact for the taxel model of Definition 5.2 (a load on an edge shared by two taxels may be counted by
-either). The grid LPs use strict half-open cells. The closure model contains the strict one, so the reduced bounds are
-conservative for it (Remark 5.9); for rectangular taxels the two gave the same values in all tests
-(`test_rem_5_9_strict_model_matches_closure`).
-Since the grid bounds are inner approximations, for every q
-    reduced lower <= grid lower <= h_true <= grid upper <= reduced upper.
+The values are exact for half-open dyadic taxels (lem:half_open) and for the closure model. The grid LPs of
+`bounds.py` use strict half-open cells on a finite grid, so for every q
+    reduced lower <= grid lower <= h_true <= grid upper <= reduced upper,
+with the differences vanishing as the support grid is refined.
 """
+
+import itertools
 
 import cvxpy as cp
 import numpy as np
 from scipy import sparse
 
-from .bounds import _batch, cellwise_g, cop_rows, cop_set_MF, gmp, outer_search
+from .bounds import _batch, cellwise_g, coarse_lower, gmp
 from .geometry import J, TaxelGrid
 
 
@@ -30,48 +33,44 @@ def taxel_vertices(taxels):
     return np.stack([lo, np.c_[hi[:, 0], lo[:, 1]], hi, np.c_[lo[:, 0], hi[:, 1]]], axis=1)
 
 
-# --- M_T: taxel forces and CoP (Section 6) -----------------------------------------------
+# --- M_T: taxel forces and first moment ---------------------------------------------------
 
-def vertex_lp_MT(taxels, F, c, q, mu=1.0, return_weights=False):
-    """Vertex LP of Thm 6.2 for one direction q and reference CoP c.
+def vertex_lp_MT(taxels, F, m1, q, mu=1.0, return_weights=False):
+    """Corner LP of thm:combined_upper for one direction q and first moment m1.
 
-    max mu sum_ik lambda_ik ||a + bJ(v_ik - c)||  s.t.  sum_k lambda_ik = F_i,  sum_ik lambda_ik (v_ik - c) = 0.
-    Infeasible (nan) if c is outside the closure of C_MF. With return_weights=True, also
-    returns the optimal weights as an (r, 4) array: a vertex solution has at most r + 2 nonzeros.
+    max mu sum_ik lambda_ik ||a + bJ v_ik||  s.t.  sum_k lambda_ik = F_i,  sum_ik lambda_ik v_ik = m1.
+    Infeasible (nan) if m1 is outside sum_i F_i closure(P_i). With return_weights=True, also returns the optimal
+    weights as an (r, 4) array: a vertex solution has at most r + 2 nonzeros.
     """
     V = taxel_vertices(taxels).reshape(-1, 2)
     rows = sparse.kron(sparse.eye(taxels.r), np.ones((1, 4)))
-    A = sparse.vstack([rows, sparse.csr_matrix(cop_rows(V, c))]).tocsr()
-    b = np.concatenate([F, [0.0, 0.0]])
-    val, lam = gmp(V, q, c, A, b, mu, "max", return_measure=True)
+    A = sparse.vstack([rows, sparse.csr_matrix(V.T)]).tocsr()
+    b = np.concatenate([np.asarray(F, float), np.asarray(m1, float)])
+    val, lam = gmp(V, q, A, b, mu, "max", return_measure=True)
     if return_weights:
         return val, (None if lam is None else lam.reshape(taxels.r, 4))
     return val
 
 
 class _TaxelSOCP:
-    """Lower-bound SOCPs of Thm 6.1 (CoP fixed to c) and Thm 7.2 (c = None: CoP free).
+    """Lower-bound SOCP of thm:combined_lower:
 
-        min mu sum_i F_i ||a + bJ(c_i - c)||  s.t.  c_i in closure(P_i)  [and sum_i F_i c_i = f_N c]
+        min mu sum_i ||F_i a + bJ u_i||  s.t.  u_i in F_i closure(P_i),  sum_i u_i = m_1,
 
-    with c = sum_i F_i c_i / f_N when the CoP is free. Built once; (a, b) are cvxpy parameters,
+    in the local first moments u_i (F_i = 0 forces u_i = 0). Built once; (a, b) are cvxpy parameters,
     so solving for many directions only re-solves the same compiled problem.
     """
 
-    def __init__(self, taxels, F, mu=1.0, c=None):
+    def __init__(self, taxels, F, m1, mu=1.0):
         F = np.asarray(F, float)
-        self.mu, self.fN = mu, F.sum()
+        self.mu, self.F = mu, F
         self.a, self.b = cp.Parameter(2), cp.Parameter()
-        C = cp.Variable((taxels.r, 2))
-        ref = (F @ C) / self.fN if c is None else np.asarray(c, float)
-        ones = np.ones((taxels.r, 1))
-        D = C - ones @ cp.reshape(ref, (1, 2), order="C")  # c_i - c, row-wise
-        V = ones @ cp.reshape(self.a, (1, 2), order="C") + self.b * (D @ J.T)
-        cons = [C >= taxels.lo, C <= taxels.hi]
-        if c is not None:
-            cons.append(F @ C == self.fN * ref)
-        self.C = C
-        self.prob = cp.Problem(cp.Minimize(F @ cp.norm(V, 2, axis=1)), cons)
+        U = cp.Variable((taxels.r, 2))
+        Fc = F[:, None]
+        V = Fc @ cp.reshape(self.a, (1, 2), order="C") + self.b * (U @ J.T)
+        cons = [U >= Fc * taxels.lo, U <= Fc * taxels.hi, cp.sum(U, axis=0) == np.asarray(m1, float)]
+        self.U = U
+        self.prob = cp.Problem(cp.Minimize(cp.sum(cp.norm(V, 2, axis=1))), cons)
 
     def __call__(self, q):
         self.a.value, self.b.value = np.asarray(q[:2], float), float(q[2])
@@ -80,90 +79,74 @@ class _TaxelSOCP:
             return np.nan
         return self.mu * self.prob.value
 
+    def points(self):
+        """Local CoPs c_i = u_i / F_i of the minimizing point loads (nan for F_i = 0)."""
+        with np.errstate(invalid="ignore", divide="ignore"):
+            return np.where(self.F[:, None] > 0, self.U.value / self.F[:, None], np.nan)
 
-def _solve_socp(solve, q, return_points):
-    """Evaluate a _TaxelSOCP at one direction (3,) or a batch (m, 3); optionally the optimal points c_i."""
+
+def socp_lower_MT(taxels, F, m1, q, mu=1.0, return_points=False):
+    """thm:combined_lower: SOCP lower bound given the taxel forces F and the first moment m1, for q (3,) or (m, 3).
+
+    With return_points=True (single q), also returns the optimal point loads c_i, shape (r, 2): the minimizing
+    measure is sum_i F_i delta_{c_i} (lem:concentrate_spread).
+    """
+    solve = _TaxelSOCP(taxels, F, m1, mu)
     q = np.asarray(q, float)
     if return_points:
         if q.ndim != 1:
             raise ValueError("return_points=True needs a single direction q")
-        return solve(q), solve.C.value
+        return solve(q), solve.points()
     return solve(q) if q.ndim == 1 else np.array([solve(qi) for qi in q])
 
 
-def socp_lower_MT(taxels, F, c, q, mu=1.0, return_points=False):
-    """Thm 6.1: SOCP lower bound with known CoP c, for q of shape (3,) or (m, 3).
-
-    With return_points=True (single q), also returns the optimal points c_i, shape (r, 2): the
-    minimizing measure is sum_i F_i delta_{c_i} (Lemma 5.5).
-    """
-    return _solve_socp(_TaxelSOCP(taxels, F, mu, c), q, return_points)
-
-
-def socp_lower_MF(taxels, F, q, mu=1.0, return_points=False):
-    """Thm 7.2: joint convex lower bound with unknown CoP, for q of shape (3,) or (m, 3).
-
-    With return_points=True (single q), also returns the optimal points c_i, shape (r, 2).
-    """
-    return _solve_socp(_TaxelSOCP(taxels, F, mu, None), q, return_points)
-
-
 def reduced_MT(taxels, yT, q, mu=1.0):
-    """(lower, upper) from Thms 6.1 and 6.2, given yT = (f_N, c, F)."""
-    _, c, F = yT
-    lower = _TaxelSOCP(taxels, F, mu, c)
-    return _batch(lambda qi: (lower(qi), vertex_lp_MT(taxels, F, c, qi, mu)), q)
+    """(lower, upper) from thm:combined_lower and thm:combined_upper, given yT = (f_N, m_1, F)."""
+    _, m1, F = yT
+    lower = _TaxelSOCP(taxels, F, m1, mu)
+    return _batch(lambda qi: (lower(qi), vertex_lp_MT(taxels, F, m1, qi, mu)), q)
 
 
-# --- M_0: total force and CoP (Section 4) ------------------------------------------------
+# --- M_0: total force and first moment -----------------------------------------------------
 
 def reduced_M0(patch, y0, q, mu=1.0):
-    """(lower, upper): mu f_N ||a|| (Thm 4.3) and the patch-vertex LP (Cor 4.6 = Thm 6.2 with r = 1)."""
-    fN, c = y0
+    """(lower, upper): mu ||f_N a + bJ m_1|| and the patch-vertex LP (the single-taxel corner LP)."""
+    fN, m1 = y0
     single = TaxelGrid(patch, 1, 1)
-    F = np.array([fN])
-    return _batch(lambda qi: (mu * fN * np.linalg.norm(qi[:2]), vertex_lp_MT(single, F, c, qi, mu)), q)
+    return _batch(lambda qi: (coarse_lower(y0, qi, mu), vertex_lp_MT(single, np.array([fN]), m1, qi, mu)), q)
 
 
-# --- M_F: taxel forces only (Section 7) --------------------------------------------------
-
-def reduced_MF(taxels, F, q, mu=1.0, n_c=7, polish=True):
-    """(lower, upper) from Thm 7.2 (global SOCP) and Thm 7.3.
-
-    The upper bound is max over c in the closure of C_MF of the vertex LP (Prop 7.1), computed
-    with `outer_search`, so it may sit slightly below the true maximum.
+def coarse_upper_triangles(patch, y0, q, mu=1.0):
+    """Coarse upper bound as the maximum over the vertex triangles of the patch that contain the CoP
+    (cor:coarse_upper_polygon (ii)), with homogeneous barycentric weights. Vectorized over q.
     """
+    fN, m1 = y0
+    q = np.atleast_2d(np.asarray(q, float))
+    V = taxel_vertices(TaxelGrid(patch, 1, 1))[0]
+    best = np.full(len(q), -np.inf)
+    for tri in itertools.combinations(range(4), 3):
+        M = np.vstack([np.ones(3), V[list(tri)].T])  # [1; v] lambda = (f_N, m_1)
+        if abs(np.linalg.det(M)) < 1e-12:
+            continue
+        lam = np.linalg.solve(M, np.r_[fN, m1])
+        if np.any(lam < -1e-12 * max(fN, 1.0)):
+            continue  # this triangle does not contain the CoP
+        g = np.linalg.norm(q[:, None, :2] + q[:, None, 2:3] * (V[list(tri)] @ J.T)[None], axis=2)
+        best = np.maximum(best, mu * g @ lam)
+    if fN == 0:
+        best[:] = 0.0
+    return best[0] if len(best) == 1 else best
+
+
+# --- M_F: taxel forces only -----------------------------------------------------------------
+
+def reduced_MF(taxels, F, q, mu=1.0):
+    """(lower, upper) = mu sum_i F_i (min, max) of g over the taxel closures (thm:MF): exact closed forms."""
     F = np.asarray(F, float)
-    lower = _TaxelSOCP(taxels, F, mu, None)
-    lo_c, hi_c = cop_set_MF(taxels, F)
-    xatol = 1e-4 * taxels.patch.diam
 
     def one(qi):
-        """(lower, upper) for one direction qi: the global SOCP, and the max over c of the vertex LP."""
-        up, _ = outer_search(lambda c: vertex_lp_MT(taxels, F, c, qi, mu), lo_c, hi_c, "max", n_c, polish, xatol)
-        return lower(qi), up
-
-    return _batch(one, q)
-
-
-def certified_ref_MF(taxels, F, q, mu=1.0, c_hat=None):
-    """Prop 7.4: fixed-reference cellwise bounds corrected by mu |b| f_N delta(c_hat).
-
-    delta(c_hat) = max distance from c_hat to C_MF (attained at a corner of the rectangle).
-    The default c_hat, the centre of C_MF, minimizes delta. The lower bound is also clipped
-    below by the universal bound mu f_N ||a|| of eq. (34). This clip is not part of eq. (74), but it is valid
-    since every compatible measure satisfies eq. (34) (Prop 8.1).
-    """
-    F = np.asarray(F, float)
-    fN = F.sum()
-    lo_c, hi_c = cop_set_MF(taxels, F)
-    c_hat = (lo_c + hi_c) / 2 if c_hat is None else np.asarray(c_hat, float)
-    delta = np.linalg.norm(np.maximum(np.abs(c_hat - lo_c), np.abs(c_hat - hi_c)))
-
-    def one(qi):
-        """(lower, upper) for one direction qi, eq. (74) with the CoP-uncertainty correction."""
-        gmin, gmax = cellwise_g(taxels, qi, c_hat)
-        corr = mu * abs(qi[2]) * fN * delta
-        return max(mu * F @ gmin - corr, mu * fN * np.linalg.norm(qi[:2])), mu * F @ gmax + corr
+        """(lower, upper) for one direction qi."""
+        gmin, gmax = cellwise_g(taxels, qi)
+        return mu * F @ gmin, mu * F @ gmax
 
     return _batch(one, q)

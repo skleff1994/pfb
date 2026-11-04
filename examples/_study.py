@@ -17,9 +17,10 @@ import pfb
 DATA = Path(__file__).parent / "data"
 MU = 1.0
 LEVER = 0.2  # lever arm (in pad sides) that balances force and torque in the mixed direction
+REF = "cop"  # twists are given about the true CoP of each field (a fixed physical twist per field)
 DIRECTIONS = {
-    "support in direction q = (0, 0, 1)": np.array([0.0, 0.0, 1.0]),
-    f"mixed  q ∝ (1, 0, 1/{LEVER})": np.array([1.0, 0.0, 1.0 / LEVER]) / np.hypot(1.0, 1.0 / LEVER),
+    "rotation about the CoP  q = (0, 0, 1)": np.array([0.0, 0.0, 1.0]),
+    f"mixed  q ∝ (1, 0, 1/{LEVER}) about the CoP": np.array([1.0, 0.0, 1.0 / LEVER]) / np.hypot(1.0, 1.0 / LEVER),
 }
 
 
@@ -36,7 +37,7 @@ def get_study(description):
     if args.recompute and cache.exists():
         cache.unlink()
     Q = np.array(list(DIRECTIONS.values()))
-    S = pfb.resolution_study(fields, ks, Q, MU, cache=cache)
+    S = pfb.resolution_study(fields, ks, Q, MU, ref=REF, cache=cache)
     return S, list(DIRECTIONS)
 
 

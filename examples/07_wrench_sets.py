@@ -1,10 +1,11 @@
-"""F1: guaranteed (inner, W-) and possible (outer, W+) wrench sets for M_0, M_F and M_T.
+"""F1: guaranteed (X-) and possible (X+) wrench sets for M_0, M_F and M_T.
 
 One partial, tilted contact (a ramp clipped by the pad edge, outside the parametric families).
-Rows: 4x4 and 16x16 taxels. Columns: pressure | M_0 | M_F | M_T, each in the (f_T1, tau_N) plane.
-The true W(nu) is filled grey, W+ is the solid line (upper bound) and W- the dashed line (lower
+Rows: 4x4 and 16x16 taxels. Columns: pressure | M_0 | M_F | M_T, each in the (f_T1, tau) plane, with the
+torque about the true CoP (a fixed point for all three measurements, so the sets are comparable).
+The true set is filled grey, X+ is the solid line (upper bound) and X- the dashed line (lower
 bound); see `pfb.plot` for how the sets are built from the support bounds. M_0 does not depend on
-the taxels, and its inner set is the force segment (no guaranteed torsion, Thm 4.3).
+the taxels, and its guaranteed set is the force segment (no guaranteed torsion about the CoP, cor:coarse_inner).
 Figures: 07_wrench_sets.png and $PFB_DOC_FIG/wrench_sets.pdf.
 """
 
@@ -25,7 +26,7 @@ gs = fig.add_gridspec(len(rows), 4, width_ratios=[1.15, 1, 1, 1], wspace=0.5, hs
 ref = None
 for r, k in enumerate(rows):
     taxels = pfb.TaxelGrid(patch, k, k)
-    B = pp.all_bounds(nu, taxels, Q, mu, mf_kwargs=dict(n_c=5, polish=True))
+    B = pp.all_bounds(nu, taxels, Q, mu, o=nu.cop)
     ax = pp.plot_patch(nu, taxels, fig.add_subplot(gs[r, 0]))
     ax.set_title(f"pressure, {k}x{k} taxels", loc="left", fontsize=10)
     ax.legend(fontsize=7, loc="lower left")

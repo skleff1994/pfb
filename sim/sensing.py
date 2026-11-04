@@ -5,7 +5,7 @@ at its centroid x_f, with normal force A_f p_f along the face normal (Masterjohn
 Sec. IV). For the planar model we keep the faces parallel to the pad (an object pressed into the gel
 also touches it with its side walls) and use their force component along the pad normal. The normal
 force measure seen by the pad is then nu = sum_f F_f delta_{x_f}, with x_f in the pad plane, and
-its true frictional capacity is the support function of Prop 3.2 evaluated on these points.
+its true frictional capacity is the support function of its admissible wrench set evaluated on these points.
 
 Conventions of the grasp scenes (grip.py, bar_breakaway.py): the grip axis is world y, the grasp
 plane is the world (x, z) plane, and its common coordinates are u = (z, x), so that the planar
@@ -24,7 +24,7 @@ GRID = 0.032  # side of the square taxel footprint of each pad in the grip scene
 def to_common(p_W):
     """World points (n, 3) -> grasp-plane coordinates u = (z, x) (common frame, torques about +y).
 
-    The order (z, x) makes (e_z, e_x, e_y) right-handed, so the 2D cross product of pfb (J of eq. (17))
+    The order (z, x) makes (e_z, e_x, e_y) right-handed, so the 2D cross product of pfb (J, x × y = (Jx)^T y)
     gives the torque about +y without a sign flip.
     """
     return np.asarray(p_W)[:, [2, 0]]
@@ -138,9 +138,10 @@ def taxel_forces(points, forces, taxels, offset):
 
 
 def support(points, forces, q, mu):
-    """h_W(nu)(q) = mu sum_f F_f ||a + bJ(x_f - c)|| for the discrete measure (Prop 3.2), q of shape (3,) or (m, 3).
+    """mu sum_f F_f ||a + bJ(x_f - c)|| for the discrete measure, q of shape (3,) or (m, 3).
 
-    The torque is taken about the CoP c of the measure, as in Prop 3.2 (use pfb.certify for a fixed o).
+    The support function of the wrench set with the torque about the CoP c of this measure (a diagnostic for a
+    single, known measure; the certificates in pfb.certify use a fixed reference point).
     """
     q = np.atleast_2d(np.asarray(q, float))
     c = forces @ points / forces.sum()
