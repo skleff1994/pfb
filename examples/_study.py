@@ -30,7 +30,7 @@ def get_study(description):
     parser.add_argument("--recompute", action="store_true", help="ignore the cached study")
     args = parser.parse_args()
 
-    patch = pfb.Patch(1.0, 1.0, N=64)  # unit pad; all lengths in pad sides
+    patch = pfb.Patch(1.0, 1.0, N=128)  # unit pad; all lengths in pad sides (4 grid spacings per taxel at 32x32)
     fields = pfb.population(patch, n_per_family=1 if args.quick else 3, seed=0)
     ks = [1, 2, 4, 8, 16] if args.quick else [1, 2, 4, 8, 16, 32]
     cache = DATA / ("study_quick.npz" if args.quick else "study.npz")

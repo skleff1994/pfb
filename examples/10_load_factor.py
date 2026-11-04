@@ -18,7 +18,7 @@ from pfb.certify import PadTerm, load_factor_lower, load_factor_true, load_facto
 from pfb.plot import LABEL, plot_band
 
 MU = 1.0
-patch = pfb.Patch(1.0, 1.0, N=64)
+patch = pfb.Patch(1.0, 1.0, N=128)  # 4 grid spacings per taxel at 32x32
 fields = pfb.population(patch, n_per_family=3, seed=0)
 o = np.array([0.5, 0.5])  # loads are expressed about the pad centre
 LOADS = {"pure torque  w = (0, 0, 1)": np.array([0.0, 0.0, 1.0]),
