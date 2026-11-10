@@ -2,7 +2,7 @@
 
 The grid bounds are inner approximations of the continuum bounds (half-open cells on a finite grid), so for every q:
     reduced lower <= grid lower <= h_true <= grid upper <= reduced upper,
-with the differences vanishing as the support grid is refined (lem:half_open).
+with the differences vanishing as the support grid is refined (boundary push of thm:combined_lower/upper).
 """
 
 import numpy as np
@@ -30,7 +30,7 @@ def setup(N=24, k=4):
 
 @pytest.mark.parametrize("which", ["MT", "MF"])
 def test_reduced_contains_grid_and_converges(which):
-    """[thm:MF, thm:combined_lower/upper, lem:half_open] grid inside reduced; the gap vanishes as N grows."""
+    """[thm:MF, thm:combined_lower/upper] grid inside reduced; the gap vanishes as N grows."""
     errors = []
     for N in (12, 48):
         _, nu, tx, yT = setup(N)
@@ -45,7 +45,7 @@ def test_reduced_contains_grid_and_converges(which):
 
 
 def test_half_open_cop_on_boundary_of_compatible_set():
-    """[lem:half_open] Every taxel carries its force on its closed left edge, so the CoP is extreme in the compatible set;
+    """[thm:combined_lower/upper, boundary push] Every taxel carries its force on its closed left edge, so the CoP is extreme in the compatible set;
     the half-open grid bounds still converge to the closure values."""
     gaps = []
     for N in (16, 64):
@@ -97,7 +97,7 @@ def test_M0_is_single_taxel_MT():
 
 
 def test_MT_inside_MF_and_points_are_compatible():
-    """[rem:MT_special, lem:concentrate_spread] M_F bounds bracket M_T; the SOCP minimizer is a compatible measure."""
+    """[rem:MT_special, lem:taxel_reduction] M_F bounds bracket M_T; the SOCP minimizer is a compatible measure."""
     _, nu, tx, yT = setup()
     fN, m1, F = yT
     loF, upF = pfb.reduced_MF(tx, F, QS, MU)

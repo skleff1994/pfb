@@ -25,7 +25,7 @@ The policies are listed in `policies.py`. The saved `.html` replays open in any 
   - Drake's contact faces, filled with their pressure;
   - the policy's taxel grid;
   - the CoP;
-  - for a certificate, its worst-case point loads: the compatible pressure that attains s_hat (the certificate is attained, `prop:load_factor` (iv)).
+  - for a certificate, its worst-case point loads: the compatible pressure that attains s_hat (the certificate is attained, `prop:load_factor_lower`).
 
 ## Pipeline
 

@@ -1,8 +1,9 @@
 """Conceptual figures for the theory note, computed with pfb.
 
   measurements.pdf      what M_0, M_F and M_T know about the same contact
-  vertex_reduction.pdf  lower bound = concentrate, upper bound = spread to the corners (rem:why_lemmas)
-  closure.pdf           ghost masses on taxel corners and the CoP-preserving push (lem:half_open);
+  vertex_reduction.pdf  lower bound = concentrate, upper bound = spread to the corners (lem:taxel_reduction)
+  load_factor_concept.pdf  the load factors of the certificate: reach along a ray, tightest half-plane, decision vs measurement
+  closure.pdf           ghost masses on taxel corners and the CoP-preserving push (boundary push, thm:combined_lower/upper);
                         not used by the theory note at the moment
 
 Vector PDFs are written to $PFB_DOC_FIG (see _style.py), and PNG previews to examples/figures/.
@@ -12,6 +13,7 @@ import numpy as np
 
 import pfb
 from _style import COLOR, MUTED, plt, save
+from pfb.certify import PadTerm, load_factor_lower, load_factor_true, load_factor_upper
 
 INK, GHOST = COLOR["truth"], "#e34948"
 plt.rcParams.update({"font.size": 8, "axes.grid": False, "axes.titlesize": 8.5})
@@ -123,10 +125,10 @@ ax.plot(m, chord(m), "o", color=COLOR["MT"], ms=4)
 ax.plot(m, (g(x1) + g(x2)) / 2, "o", color=INK, ms=4)
 ax.plot(m, g(m), "o", color=COLOR["MT"], mfc="white", ms=4)
 ax.plot([x1, x2], [0, 0], "o", color=INK, ms=3, clip_on=False)
-ax.text(m - 0.03, chord(m) + 0.04, "spread to $v_1,v_2$", ha="right", va="bottom", fontsize=6.5, color=COLOR["MT"])
+ax.text(m - 0.03, chord(m) + 0.04, "spread to $v_{i1},v_{i2}$", ha="right", va="bottom", fontsize=6.5, color=COLOR["MT"])
 ax.text(m + 0.03, (g(x1) + g(x2)) / 2, "actual", va="center", fontsize=6.5)
-ax.text(m + 0.03, g(m) - 0.02, "concentrate at $m$", va="top", fontsize=6.5, color=COLOR["MT"])
-ax.set_xticks([0, x1, m, x2, 1], ["$v_1$", "$x_1$", "$m$", "$x_2$", "$v_2$"])
+ax.text(m + 0.03, g(m) - 0.02, "concentrate at $u_i/F_i$", va="top", fontsize=6.5, color=COLOR["MT"])
+ax.set_xticks([0, x1, m, x2, 1], ["$v_{i1}$", "$x$", "$u_i/F_i$", "$x'$", "$v_{i2}$"])
 ax.set_yticks([]); ax.set_ylim(0, 0.75)
 ax.spines["left"].set_visible(False)
 ax.set_title("(a) convex $g$ on a taxel", loc="left")
@@ -163,7 +165,7 @@ ax.text(0.5, -0.06, f"$\\overline{{h}}={up_val:.3f}$, {keep.sum()} nonzero weigh
 fig.tight_layout(w_pad=0.6)
 save(fig, "vertex_reduction.png", pdf_stem="vertex_reduction")
 
-# --- closure figure: ghost masses (lem:half_open) ---------------------------------------------
+# --- closure figure: ghost masses (boundary push) ---------------------------------------------
 tx = pfb.TaxelGrid(patch, 2, 1)
 fN, m1, F = pfb.measure_MT(nu, tx)
 c = m1 / fN
@@ -228,3 +230,127 @@ ax.text(0.5, -0.13, f"CoP unchanged: $|c_\\varepsilon-c|={np.linalg.norm(cop_eps
         ha="center", va="top", transform=ax.transAxes, fontsize=6.5)
 fig.tight_layout(w_pad=0.5)
 save(fig, "closure.png", pdf_stem="closure")
+
+
+# --- Fig. 4: the load factors (prop:load_factor) ------------------------------------------------
+# A load w = (f_x, 0, tau) about the pad centre o is a ray in the 3D wrench space; the plane f_y = 0 slices
+# the wrench sets, so the load factor s(w) is the distance from the origin to the boundary of the slice along w.
+# Plot coordinates: (f_x, tau / ell) with a fixed lever ell, so that both axes are forces.
+UNDEC = "#c9c8c3"
+HOLD, SLIP, CUT = COLOR["MT"], GHOST, "#8a4fd6"  # decision zones; supporting half-planes
+o = np.array([patch.Lx / 2, patch.Ly / 2])
+ell = 0.4
+tx4, tx16 = pfb.TaxelGrid(patch, 4, 4), pfb.TaxelGrid(patch, 16, 16)
+fN, m1, F4 = pfb.measure_MT(nu, tx4)
+F16, c = tx16.downsample(nu), m1 / fN
+pad4 = PadTerm.from_taxels(tx4, F4, cop=c)
+atoms = nu.w > 0
+w_dir = lambda t: np.array([np.cos(t), 0.0, ell * np.sin(t)])  # (f_x, f_y, tau), plotted at (f_x, tau / ell)
+true_factor = lambda w: load_factor_true(patch.points[atoms], nu.w[atoms], w, mu, o)
+
+# (a) radial functions: s_lo (guaranteed set X-), true s* and s_up (possible set X+) in 72 directions of the plane
+ts = np.linspace(0, 2 * np.pi, 73)
+S = np.array([(load_factor_lower(pad4, w_dir(t), mu, o), true_factor(w_dir(t)), load_factor_upper(pad4, w_dir(t), mu, o))
+              for t in ts])
+assert np.all(S[:, 0] <= S[:, 1] + 1e-5) and np.all(S[:, 1] <= S[:, 2] + 1e-5), "s_lo <= s* <= s_up violated"
+print(f"Fig 4: s_lo/s* in [{(S[:, 0] / S[:, 1]).min():.2f}, {(S[:, 0] / S[:, 1]).max():.2f}], "
+      f"s_up/s* in [{(S[:, 2] / S[:, 1]).min():.2f}, {(S[:, 2] / S[:, 1]).max():.2f}] over the plane")
+slice_pts = [np.c_[S[:, k] * np.cos(ts), S[:, k] * np.sin(ts)] for k in range(3)]  # X-, truth, X+
+
+t0 = np.radians(50)  # the load w0 used in all panels
+w0, d0 = w_dir(t0), np.array([np.cos(t0), np.sin(t0)])
+s_lo, q_lo = load_factor_lower(pad4, w0, mu, o, return_q=True)
+s_up, q_up = load_factor_upper(pad4, w0, mu, o, return_q=True)
+s_true = true_factor(w0)
+
+
+def supporting_line(ax, q, h, **kw):
+    """Line <q, (f_x, 0, tau)> = h in the plot plane: a half-plane that contains the slice."""
+    n = np.array([q[0], q[2] * ell])
+    p0, d = h * n / (n @ n), np.array([-n[1], n[0]]) / np.linalg.norm(n)
+    ax.plot(*np.c_[p0 - 4 * d, p0 + 4 * d], **kw)
+
+
+def slices(ax, alpha=1.0, lw=1.4, labels=False):
+    """True set (grey), possible set X+ (solid) and guaranteed set X- (dashed) in the plane f_y = 0."""
+    ax.fill(*slice_pts[1].T, color="#e4e3df", alpha=alpha, zorder=0)
+    ax.plot(*slice_pts[2].T, color=INK, lw=lw, alpha=alpha)
+    ax.plot(*slice_pts[0].T, color=INK, lw=lw, alpha=alpha, ls="--")
+    lim = 1.1 * np.abs(np.r_[slice_pts[2], slice_pts[1]]).max()
+    ax.set_aspect("equal"); ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim)
+    ax.axhline(0, color=MUTED, lw=0.4); ax.axvline(0, color=MUTED, lw=0.4)
+    ax.set_xticks([]); ax.set_yticks([])
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    ax.set_xlabel("$f_x$"); ax.set_ylabel("$\\tau/L_0$")
+    if labels:  # direct labels on the curves
+        k1, k2 = (np.argmin(abs(ts - np.radians(d))) for d in (140, 270))
+        ax.text(*(slice_pts[2][k1] + [-0.05, 0.04]), "$\\mathcal{X}^+$", ha="right", va="bottom", fontsize=7.5)
+        ax.text(*(slice_pts[0][k2] * 0.62), "$\\mathcal{X}^-$", ha="center", va="center", fontsize=7.5)
+
+fig, axes = plt.subplots(1, 3, figsize=(7.6, 3.2), gridspec_kw=dict(width_ratios=[1.15, 1.15, 1]))
+ax = axes[0]
+slices(ax, labels=True)
+for a0, a1, col in ((0, s_lo, HOLD), (s_lo, s_up, UNDEC), (s_up, 1.45 * s_up, SLIP)):  # hold / undecided / slip zones
+    ax.plot(*np.c_[a0 * d0, a1 * d0], color=col, lw=3, solid_capstyle="butt", zorder=3)
+ax.plot(*(s_lo * d0), "o", color=HOLD, mec=INK, mew=0.6, ms=5, zorder=4)
+ax.plot(*(s_true * d0), "o", color=INK, ms=5, zorder=4)
+ax.plot(*(s_up * d0), "o", color="white", mec=INK, ms=5, zorder=4)
+perp = np.array([d0[1], -d0[0]])  # to the right of the ray
+for s_mark, lab in ((s_lo, "$\\underline{s}$"), (s_true, "$s^\\star$"), (s_up, "$\\overline{s}$")):
+    ax.text(*(s_mark * d0 - 0.11 * perp), lab, fontsize=8, ha="right", va="center")
+for sc, lab in ((0.6 * s_lo, "A hold"), (0.5 * (s_lo + s_true), "B undecided"), (1.3 * s_up, "C slip")):
+    ax.plot(*(sc * d0), "D", color=INK, ms=3, zorder=4)
+    ax.text(*(sc * d0 + 0.07 * perp), lab, fontsize=6.5, ha="left", va="center")
+ax.set_title("(a) ray view: load factor = reach", loc="left")
+
+# (b) the same load factors as the tightest supporting half-plane: s_up = min over <q, w0> = 1 of h_up(q)
+ax = axes[1]
+slices(ax, alpha=0.45, lw=0.9)
+ax.plot(*np.c_[0 * d0, 1.45 * s_up * d0], color=MUTED, lw=1)
+n0 = np.array([w0[2], 0.0, -w0[0]]) / np.hypot(w0[2], w0[0])  # keeps <q, w0> = 1 when added to q
+for step in (-0.5, -0.25, 0.25, 0.5):  # other directions: each half-plane contains X+ but cuts the ray farther out
+    q = q_up + step * np.linalg.norm(q_up) * n0
+    q = q / (q @ w0)
+    h = float(np.atleast_1d(pfb.reduced_MT(tx4, (fN, m1, F4), pfb.shift_twist(q, o), mu)[1])[0])
+    supporting_line(ax, q, h, color=CUT, lw=0.7, alpha=0.8)
+    ax.plot(*(h * d0), "x", color=CUT, ms=3.5, mew=0.8, zorder=4)
+supporting_line(ax, q_up, s_up, color=CUT, lw=1.6)
+supporting_line(ax, q_lo, s_lo, color=CUT, lw=1.6, ls="--")
+ax.plot(*(s_up * d0), "o", color="white", mec=INK, ms=5, zorder=4)
+ax.plot(*(s_lo * d0), "o", color=HOLD, mec=INK, mew=0.6, ms=5, zorder=4)
+ax.set_title("(b) dual view: tightest half-plane", loc="left")
+
+# (c) the decision band shrinks with the measurement (information order of the operators)
+ax = axes[2]
+pads = [("$\\mathcal{M}_0$", PadTerm.from_taxels(pfb.TaxelGrid(patch, 1, 1), [fN], cop=c)),
+        ("$\\mathcal{M}_F$ 4x4", PadTerm.from_taxels(tx4, F4)),
+        ("$\\mathcal{M}_T$ 4x4", pad4),
+        ("$\\mathcal{M}_T$ 16x16", PadTerm.from_taxels(tx16, F16, cop=c))]
+xmax = 3.0
+for r, (name, pad) in enumerate(pads):
+    lo, up = (f(pad, w0, mu, o) / s_true for f in (load_factor_lower, load_factor_upper))
+    y = len(pads) - 1 - r
+    for a0, a1, col in ((0, lo, HOLD), (lo, min(up, xmax), UNDEC), (min(up, xmax), xmax, SLIP)):
+        ax.barh(y, a1 - a0, left=a0, height=0.55, color=col, lw=0)
+ax.axvline(1, color=INK, lw=1)
+ax.text(1.03, len(pads) - 0.45, "true capacity", fontsize=6.5, va="bottom")
+ax.set_yticks(range(len(pads)), [n for n, _ in pads][::-1]); ax.set_xlim(0, xmax); ax.set_ylim(-0.5, len(pads) - 0.2)
+ax.set_xlabel("demanded load / true capacity $s^\\star$")
+ax.set_title("(c) decision vs measurement", loc="left")
+
+from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.patches import Patch as Swatch  # noqa: E402
+handles = [Swatch(fc="#e4e3df", label="true wrench set $\\mathcal{X}(\\nu^\\star)$"),
+           Line2D([], [], color=INK, label="possible set $\\mathcal{X}^+$ (solid)"),
+           Line2D([], [], color=INK, ls="--", label="guaranteed set $\\mathcal{X}^-$ (dashed)"),
+           Line2D([], [], color=CUT, label="half-plane of $\\mathcal{X}^+$, tightest one thick"),
+           Line2D([], [], color=CUT, ls="--", label="half-plane of $\\mathcal{X}^-$"),
+           Line2D([], [], marker="x", color=CUT, ls="", ms=4, label="cut of the ray by a half-plane"),
+           Line2D([], [], marker="o", color=HOLD, mec=INK, mew=0.6, ls="", ms=5, label="$\\underline{s}$ (certified)"),
+           Line2D([], [], marker="o", color=INK, ls="", ms=5, label="$s^\\star$ (true)"),
+           Line2D([], [], marker="o", color="white", mec=INK, ls="", ms=5, label="$\\overline{s}$ (upper)"),
+           Swatch(fc=HOLD, label="hold"), Swatch(fc=UNDEC, label="undecided"), Swatch(fc=SLIP, label="slip")]
+fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=6.5, columnspacing=1.4, handlelength=1.6)
+fig.tight_layout(rect=(0, 0.17, 1, 1), w_pad=0.6)
+save(fig, "load_factor_concept.png", pdf_stem="load_factor_concept")

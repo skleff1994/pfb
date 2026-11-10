@@ -11,7 +11,8 @@ measurements are in homogeneous coordinates (f_N, m_1 = int x dnu).
     reduced_MT         SOCP lower bound in the local first moments u_i (thm:combined_lower) and the corner LP
                        upper bound (thm:combined_upper)
 
-The values are exact for half-open dyadic taxels (lem:half_open) and for the closure model. The grid LPs of
+The values are exact, as infima and suprema over compatible measures, for the half-open taxels of a uniform grid
+(boundary push in the proofs of thm:combined_lower and thm:combined_upper). The grid LPs of
 `bounds.py` use strict half-open cells on a finite grid, so for every q
     reduced lower <= grid lower <= h_true <= grid upper <= reduced upper,
 with the differences vanishing as the support grid is refined.
@@ -89,7 +90,7 @@ def socp_lower_MT(taxels, F, m1, q, mu=1.0, return_points=False):
     """thm:combined_lower: SOCP lower bound given the taxel forces F and the first moment m1, for q (3,) or (m, 3).
 
     With return_points=True (single q), also returns the optimal point loads c_i, shape (r, 2): the minimizing
-    measure is sum_i F_i delta_{c_i} (lem:concentrate_spread).
+    measure is sum_i F_i delta_{c_i} (lem:taxel_reduction).
     """
     solve = _TaxelSOCP(taxels, F, m1, mu)
     q = np.asarray(q, float)
@@ -118,7 +119,7 @@ def reduced_M0(patch, y0, q, mu=1.0):
 
 def coarse_upper_triangles(patch, y0, q, mu=1.0):
     """Coarse upper bound as the maximum over the vertex triangles of the patch that contain the CoP
-    (cor:coarse_upper_polygon (ii)), with homogeneous barycentric weights. Vectorized over q.
+    (rem:coarse_triangles), with homogeneous barycentric weights. Vectorized over q.
     """
     fN, m1 = y0
     q = np.atleast_2d(np.asarray(q, float))

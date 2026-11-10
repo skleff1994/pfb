@@ -6,7 +6,7 @@ For k x k taxels with k = 1, 2, 4, 8, 16, 32, plots the gap upper - lower of the
 prediction of the M_F gap for cells w_x x w_y, mu |b| int (|u_1| w_x + |u_2| w_y) dnu (u: unit vector from the
 center of rotation).
 Twists are about the pad centre. The last table column is the extra tightening due to the CoP:
-(M_F width - M_T width) / M_F width. The last panel shows the contraction of the compatible CoP set (rem:cop_taxel).
+(M_F width - M_T width) / M_F width. The last panel shows the contraction of the compatible CoP set (the CoP rectangle of fig:measurements).
 """
 
 import numpy as np

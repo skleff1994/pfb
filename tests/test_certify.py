@@ -158,7 +158,7 @@ def test_upper_brackets_truth_and_is_ordered(w, k):
 @pytest.mark.parametrize("w", LOADS)
 @pytest.mark.parametrize("cop", [True, False])
 def test_upper_primal_equals_dual_and_is_attained(w, cop):
-    """prop:load_factor (iii): the primal and dual SOCPs agree, and the most favourable corner measure has load factor s_up."""
+    """prop:load_factor_upper: the primal and dual SOCPs agree, and the most favourable corner measure has load factor s_up."""
     tx = pfb.TaxelGrid(PATCH, 4, 4)
     fN, m1, F = pfb.measure_MT(NU, tx)
     pad = PadTerm.from_taxels(tx, F, cop=m1 / fN if cop else None)

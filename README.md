@@ -1,7 +1,7 @@
 # pfb: planar friction bounds
 
 Small library to check numerically the results of *Torsional friction in planar contact*
-(the theory note, available on request; the statement names in brackets below, e.g. [thm:MF], refer to it).
+(the statement names in brackets below, e.g. [thm:MF], refer to the companion theory note).
 You define a normal force measure on a planar patch, downsample it into taxels, and compute bounds on the support
 function of the admissible tangential wrench set X(ν) under the measurement models M_0 (total force and CoP),
 M_F (taxel forces) and M_T (both).
@@ -74,14 +74,14 @@ There are two independent ways to compute each bound.
 
 **Exact finite-dimensional forms (`pfb/reduced.py`, the default),** solved on the continuous taxel geometry:
 - **M_0:** closed-form lower bound μ‖f_N a + bJ m_1‖ [thm:coarse_lower] and patch-vertex LP upper bound
-  [cor:coarse_upper_polygon], also available as a maximum over the vertex triangles containing the CoP. This is M_T with a
+  [cor:coarse_upper_polygon], also available as a maximum over the vertex triangles containing the CoP [rem:coarse_triangles]. This is M_T with a
   single taxel [rem:MT_special].
 - **M_F:** closed forms μ Σ_i F_i min / max of ‖a + bJx‖ over each taxel [thm:MF]; no solver.
 - **M_T:** SOCP lower bound in the local first moments [thm:combined_lower] and corner LP upper bound [thm:combined_upper].
 
-The SOCPs use cvxpy (Clarabel) and the LPs use `scipy.optimize.linprog` (HiGHS). The values are exact for half-open
-taxels of dyadic grids and for the closure model, where a load on an edge shared by two taxels may be counted by
-either [lem:half_open].
+The SOCPs use cvxpy (Clarabel) and the LPs use `scipy.optimize.linprog` (HiGHS). The values are exact, as infima and suprema over compatible measures, for the half-open
+taxels of a uniform grid. Point loads on an edge shared by two taxels are approached by moving them slightly into the taxel
+[thm:combined_lower, thm:combined_upper].
 
 **Grid LPs (`pfb/bounds.py`).** These are brute force:
 - A measure is a set of nonnegative weights on the nodes of the patch grid (boundary included), and each GMP becomes an LP over those weights.

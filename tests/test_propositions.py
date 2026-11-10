@@ -103,7 +103,7 @@ def test_thm_coarse_upper_at_most_3_atoms(nu):
 
 @pytest.mark.parametrize("nu", MEASURES)
 def test_cor_coarse_upper_triangles_equal_lp(nu):
-    """[cor:coarse_upper_polygon (ii)] Max over the vertex triangles containing the CoP = patch-vertex LP."""
+    """[rem:coarse_triangles] Max over the vertex triangles containing the CoP = patch-vertex LP."""
     y0 = pfb.measure_M0(nu)
     _, up = pfb.reduced_M0(PATCH, y0, QS, MU)
     assert np.allclose(pfb.coarse_upper_triangles(PATCH, y0, QS, MU), up, rtol=1e-7, atol=1e-9)
@@ -153,21 +153,50 @@ def test_prop_taxel_refinement_orderings(nu):
     assert np.all(h <= upT + TOL) and np.all(upT <= np.minimum(up0, upF) + TOL)
 
 
+@pytest.mark.parametrize("nu", MEASURES)
+def test_lem_taxel_reduction(nu):
+    """[lem:taxel_reduction] mu sum_i F_i g(u_i/F_i) <= h(nu) <= mu sum_ik lambda_ik g(v_ik), with the bilinear
+    corner weights lambda_ik = int alpha_ik dnu on each taxel (about the origin and about a point o)."""
+    x = PATCH.points
+    for k in (1, 2, 4):
+        t = pfb.TaxelGrid(PATCH, k, k)
+        F = t.downsample(nu)
+        V = pfb.taxel_vertices(t)  # (r, 4, 2): lo, (hi_x, lo_y), hi, (lo_x, hi_y)
+        size = (t.hi - t.lo)[t.index]
+        xi = (x - t.lo[t.index]) / size  # local coordinates in the closed taxel
+        alpha = np.stack([(1 - xi[:, 0]) * (1 - xi[:, 1]), xi[:, 0] * (1 - xi[:, 1]),
+                          xi[:, 0] * xi[:, 1], (1 - xi[:, 0]) * xi[:, 1]], axis=1)
+        lam, u = np.zeros((t.r, 4)), np.zeros((t.r, 2))
+        np.add.at(lam, t.index, nu.w[:, None] * alpha)
+        np.add.at(u, t.index, nu.w[:, None] * x)
+        assert np.allclose(lam.sum(1), F) and np.allclose(np.einsum("ik,ikd->id", lam, V), u)
+        assert np.all(lam >= -TOL)
+        pos = F > 1e-12
+        for o in (None, np.array([0.4, 0.1])):
+            h = pfb.support(nu, QS, MU, o)
+            low = MU * pfb.integrand(u[pos] / F[pos, None], QS, o) @ F[pos]
+            up = MU * (pfb.integrand(V.reshape(-1, 2), QS, o) @ lam.reshape(-1))
+            assert np.all(low <= h + TOL) and np.all(h <= up + TOL)
+
+
 @pytest.mark.parametrize("nu", MEASURES[:2])
 def test_prop_gap_bounds(nu):
-    """[prop:taxel_resolution_MT] gap <= mu sum_i F_i (max - min of g) <= mu |b| sum_i F_i diam(P_i), for M_F and M_T."""
+    """[prop:taxel_resolution_MT] gap <= mu sum_i F_i (max - min of g) <= mu |b| f_N D, for M_F and M_T."""
     for k in (1, 2, 4):
         t = pfb.TaxelGrid(PATCH, k, k)
         yT = pfb.measure_MT(nu, t)
         s = MU * np.abs(QS[:, 2]) * (yT[2] @ t.diam)
+        stated = MU * np.abs(QS[:, 2]) * yT[0] * t.diam.max()  # the statement: mu |b| f_N D on a uniform grid
         loF, upF = pfb.reduced_MF(t, yT[2], QS, MU)
         loT, upT = pfb.reduced_MT(t, yT, QS, MU)
         assert np.all(upT - loT <= upF - loF + 1e-6) and np.all(upF - loF <= s + TOL)
+        assert np.allclose(s, stated) and np.all(upT - loT <= stated + 1e-6)
 
 
 def test_thm_rate_first_order_and_halving():
-    """[thm:rate] For a bounded density, the M_F gap matches its first-order term within the stated error bound,
-    and one dyadic step divides it by about 2."""
+    """[thm:rate] For a measure with a density, gap / h approaches the first-order constant mu |b| C_nu and one dyadic
+    step divides the gap by about 2. The error is also checked against an explicit O(h^2) bound (bounded density),
+    a quantitative version that the theory note states only as a limit."""
     patch = pfb.Patch(1.0, 1.0, N=128)
     a = 0.3
     nu = pfb.hertz(patch, (0.45, 0.55), a, fN=1.0)
@@ -179,15 +208,17 @@ def test_thm_rate_first_order_and_halving():
         n = np.linalg.norm(d, axis=1)
         n[n == 0] = np.inf
         C = nu.w @ ((np.abs(d[:, 0]) + np.abs(d[:, 1])) / n)
-        gaps = []
+        gaps, rel = [], []
         for k in (16, 32, 64):
             t = pfb.TaxelGrid(patch, k, k)
             lo, up = pfb.reduced_MF(t, t.downsample(nu), q, MU)
             h, D = 1.0 / k, np.sqrt(2) / k
             err = abs(up - lo - MU * b * C * h)
             assert err <= MU * b * rho_max * D**2 * (15 / 4 * np.sqrt(np.pi) + 9 * np.pi / 4 * D)
+            rel.append(err / (MU * b * C * h))  # relative distance of gap / h to the limit
             gaps.append(up - lo)
         assert 0.45 < gaps[2] / gaps[1] < 0.55 and 0.45 < gaps[1] / gaps[0] < 0.55
+        assert rel[-1] < 0.1 and rel[-1] <= rel[0] + 1e-9  # gap / h converges to the limit of the theorem
         assert nu.fN - 1e-9 <= C <= np.sqrt(2) * nu.fN + 1e-9
 
 

@@ -148,7 +148,7 @@ def cellwise_g(taxels, q, o=None):
 def cop_set_MF(taxels, F):
     """Compatible CoPs given the taxel forces (closure model), the rectangle sum_i (F_i / f_N) P_i, as (lo, hi).
 
-    The bounds do not use this set (rem:cop_taxel); it is used in figures.
+    The bounds do not use this set (it is the CoP rectangle of fig:measurements); it is used in figures.
     """
     s = F / F.sum()
     return s @ taxels.lo, s @ taxels.hi

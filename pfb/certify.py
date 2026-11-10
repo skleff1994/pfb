@@ -6,12 +6,12 @@ frame of the pad (or a common grasp frame). For a measure nu, the load factor is
 with the support h(q) = mu int ||a + bJ(x - o)|| dnu of the admissible wrench set about o.
 Given the measurement (taxel forces, optionally the CoP), two numbers bracket s* for every compatible measure:
 
-    s_lo = min over compatible nu of s*(nu)  (certified load factor; prop:load_factor (i)-(ii))
+    s_lo = min over compatible nu of s*(nu)  (certified load factor; prop:load_factor, prop:load_factor_lower)
         Concentrating the force of each taxel at its local CoP shrinks the wrench set, so the minimum is attained by
         point loads sum_i F_i delta_{c_i}, c_i in the closure of P_i (and sum_i F_i c_i = f_N c if the CoP c is
         measured). The program is bilinear in (b, c_i); with u_i = b c_i it is the smaller of two SOCPs.
         Tight: the point loads F_i delta_{u_i / b} are a compatible measure with load factor s_lo (return_worst=True).
-    s_up = max {s : s w in closure of the possible set X^+}  (upper load factor; prop:load_factor (iii))
+    s_up = max {s : s w in closure of the possible set X^+}  (upper load factor; prop:load_factor, prop:load_factor_upper)
         X^+ is convex (fixed reference point), with support h_up(q), so s_up = min over <q, w> = 1 of h_up(q),
         an SOCP: for taxel forces alone h_up = mu sum_i F_i max_corners ||a + bJ(v - o)||, and with the CoP the
         corner LP of h_up is dualized inside the minimization. Spreading every taxel force to its corners enlarges
@@ -56,7 +56,7 @@ class PadTerm:
 
 
 def _socp(terms, w, mu, o, sign):
-    """V_sigma of prop:load_factor (ii): the certified load factor restricted to sign * b >= 0.
+    """V_sigma of prop:load_factor_lower: the certified load factor restricted to sign * b >= 0.
 
     Variables q = (a, b) with <q, w> = 1 and u_i = b c_i per taxel (perspective substitution). For
     sign * b >= 0, c_i in [lo_i, hi_i] becomes the linear cone constraints sign (u_i - b lo_i) >= 0 and
@@ -219,7 +219,7 @@ def load_factor_upper(pads, w, mu=1.0, o=(0.0, 0.0), return_q=False, return_best
 
 
 def classify(pads, w, mu=1.0, o=(0.0, 0.0), tol=1e-6):
-    """Decision rule of prop:load_factor: ("hold" | "slip" | "undecided", s_lo, s_up) for the load w about o.
+    """Decision rule (cor:load_factor_decision): ("hold" | "slip" | "undecided", s_lo, s_up) for the load w about o.
 
     "hold": every compatible pressure carries w (s_lo >= 1). "slip": none does (s_up < 1). The tolerance is
     applied in the conservative direction for "hold" and "slip".
